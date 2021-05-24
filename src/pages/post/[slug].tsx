@@ -1,36 +1,30 @@
-/* eslint-disable react/no-array-index-key */
-/* eslint-disable @typescript-eslint/explicit-module-boundary-types */
-/* eslint-disable react/no-danger */
-/* eslint-disable no-param-reassign */
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable import/no-unresolved */
 /* eslint-disable import/no-extraneous-dependencies */
-import { useEffect, useState } from 'react';
-import { FiCalendar, FiUser, FiClock } from 'react-icons/fi';
-
+/* eslint-disable no-param-reassign */
+/* eslint-disable no-return-assign */
+/* eslint-disable react/no-danger */
 import { GetStaticPaths, GetStaticProps } from 'next';
-import { useRouter } from 'next/router';
-import Link from 'next/link';
-
-import { format, parseISO } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-
-import Prismic from '@prismicio/client';
+import { format } from 'date-fns';
 import { RichText } from 'prismic-dom';
-import { getPrismicClient } from '../../services/prismic';
-
-import Comments from '../../components/components/index';
+import { FiCalendar, FiClock, FiUser } from 'react-icons/fi';
+import { ptBR } from 'date-fns/locale';
+import { useRouter } from 'next/router';
+import Prismic from '@prismicio/client';
+import Link from 'next/link';
 import Header from '../../components/Header';
+
+import { getPrismicClient } from '../../services/prismic';
 
 import commonStyles from '../../styles/common.module.scss';
 import styles from './post.module.scss';
+import Comments from '../../components/components';
 
 interface Post {
   first_publication_date: string | null;
-  last_publication_date?: string | null;
-  uid: string;
+  last_publication_date: string | null;
   data: {
     title: string;
-    subtitle: string;
     banner: {
       url: string;
     };
@@ -44,205 +38,152 @@ interface Post {
   };
 }
 
-interface PrevPost {
-  existsPrevPost: boolean;
-  uid: string;
-  title: string;
-}
-
-interface NextPost {
-  existsNextPost: boolean;
-  uid: string;
-  title: string;
-}
-
 interface PostProps {
   post: Post;
-  prevPost?: PrevPost;
-  nextPost?: NextPost;
-  preview?: boolean;
+  navigation: {
+    prevPost: {
+      uid: string;
+      data: {
+        title: string;
+      };
+    }[];
+    nextPost: {
+      uid: string;
+      data: {
+        title: string;
+      };
+    }[];
+  };
+  preview: boolean;
 }
 
-export default function Post({ post, prevPost, nextPost, preview }: PostProps) {
-  const [postFormatted, setPostFormatted] = useState(post);
-  const [estimatedReadTime, setEstimatedReadTime] = useState('');
+export default function Post({
+  post,
+  navigation,
+  preview,
+}: PostProps): JSX.Element {
+  const router = useRouter();
+  if (router.isFallback) {
+    return <h1>Carregando...</h1>;
+  }
 
-  const { isFallback } = useRouter();
+  const totalWords = post.data.content.reduce((total, contentItem) => {
+    total += contentItem.heading.split(' ').length;
 
-  useEffect(() => {
-    if (isFallback) {
-      return;
+    const words = contentItem.body.map(item => item.text.split(' ').length);
+    words.map(word => (total += word));
+    return total;
+  }, 0);
+  const readTime = Math.ceil(totalWords / 200);
+
+  const formatedDate = format(
+    new Date(post.first_publication_date),
+    'dd MMM yyyy',
+    {
+      locale: ptBR,
     }
+  );
 
-    const body = post.data.content.map(content => ({
-      text: RichText.asHtml(content.body),
-    }));
+  const isPostEdited =
+    post.first_publication_date !== post.last_publication_date;
 
-    const formatPost = {
-      ...post,
-      first_publication_date: post.first_publication_date
-        ? format(parseISO(post.first_publication_date), 'dd MMM yyyy', {
-            locale: ptBR,
-          })
-        : '09 Mai 2021 - Modo Preview',
-      last_publication_date: post.last_publication_date
-        ? format(
-            parseISO(post.last_publication_date),
-            `dd MMM yyyy, 'às' kk:mm`,
-            { locale: ptBR }
-          )
-        : '09 Mai 2021 - Modo Preview',
-      data: {
-        ...post.data,
-        content: post.data.content.map(content => ({
-          heading: content.heading,
-          body,
-        })),
-      },
-    };
-
-    setPostFormatted(formatPost);
-
-    const numberOfWords = post.data.content.reduce((accumulator, content) => {
-      const contentAsText = RichText.asText(content.body);
-
-      const words = contentAsText.split(/\s/);
-
-      accumulator += words.length;
-
-      return accumulator;
-    }, 0);
-
-    const estimatedTime = Math.ceil(numberOfWords / 200);
-
-    setEstimatedReadTime(`${estimatedTime} min`);
-  }, [isFallback, post]);
-
-  function getClassPrevNextPostContainer() {
-    if (prevPost?.existsPrevPost && nextPost?.existsNextPost) {
-      return styles.hasPrevNextPost;
-    }
-
-    if (prevPost?.existsPrevPost) {
-      return styles.hasPrevPost;
-    }
-
-    if (nextPost?.existsNextPost) {
-      return styles.hasNextPost;
-    }
-
-    return '';
+  let editionDate;
+  if (isPostEdited) {
+    editionDate = format(
+      new Date(post.last_publication_date),
+      "'* editado em' dd MMM yyyy', às' H':'m",
+      {
+        locale: ptBR,
+      }
+    );
   }
 
   return (
     <>
-      {isFallback ? (
-        <h1>Carregando...</h1>
-      ) : (
-        <>
-          <Header />
+      <Header />
+      <img src={post.data.banner.url} alt="imagem" className={styles.banner} />
+      <main className={commonStyles.container}>
+        <div className={styles.post}>
+          <div className={styles.postTop}>
+            <h1>{post.data.title}</h1>
+            <ul>
+              <li>
+                <FiCalendar />
+                {formatedDate}
+              </li>
+              <li>
+                <FiUser />
+                {post.data.author}
+              </li>
+              <li>
+                <FiClock />
+                {`${readTime} min`}
+              </li>
+            </ul>
+            <span>{isPostEdited && editionDate}</span>
+          </div>
 
-          <section className={styles.banner}>
-            <img src={postFormatted?.data.banner.url} alt="Banner" />
-          </section>
+          {post.data.content.map(content => {
+            return (
+              <article key={content.heading}>
+                <h2>{content.heading}</h2>
+                <div
+                  className={styles.postContent}
+                  dangerouslySetInnerHTML={{
+                    __html: RichText.asHtml(content.body),
+                  }}
+                />
+              </article>
+            );
+          })}
+        </div>
 
-          <main className={`${commonStyles.container} ${styles.main}`}>
-            <h1>{postFormatted?.data.title}</h1>
-
-            <div className={styles.info}>
-              <div>
-                <FiCalendar width={20} height={20} />
-                <time>{postFormatted?.first_publication_date}</time>
-              </div>
-
-              <div>
-                <FiUser width={20} height={20} />
-                <span>{postFormatted?.data.author}</span>
-              </div>
-
-              <div>
-                <FiClock width={20} height={20} />
-                <span>{estimatedReadTime}</span>
-              </div>
+        <section className={`${styles.navigation} ${commonStyles.container}`}>
+          {navigation?.prevPost.length > 0 && (
+            <div>
+              <h3>{navigation.prevPost[0].data.title}</h3>
+              <Link href={`/post/${navigation.prevPost[0].uid}`}>
+                <a>Post anterior</a>
+              </Link>
             </div>
+          )}
 
-            {postFormatted?.last_publication_date && (
-              <section className={styles.lastPublicationDate}>
-                * editado em <time>{postFormatted?.last_publication_date}</time>
-              </section>
-            )}
+          {navigation?.nextPost.length > 0 && (
+            <div>
+              <h3>{navigation.nextPost[0].data.title}</h3>
+              <Link href={`/post/${navigation.nextPost[0].uid}`}>
+                <a>Próximo post</a>
+              </Link>
+            </div>
+          )}
+        </section>
 
-            <article>
-              {postFormatted?.data.content.map((content, index) => (
-                <section key={index}>
-                  <h2>{content.heading}</h2>
+        <Comments />
 
-                  <div
-                    className={styles.postContent}
-                    dangerouslySetInnerHTML={{
-                      __html: content.body[index].text,
-                    }}
-                  />
-                </section>
-              ))}
-            </article>
-
-            <section
-              className={`${
-                styles.prevNextPostContainer
-              } ${getClassPrevNextPostContainer()}`}
-            >
-              {prevPost?.existsPrevPost && (
-                <Link href={`/post/${prevPost.uid}`}>
-                  <a>
-                    <button type="button">
-                      <h3>{prevPost.title}</h3>
-                      <p>Post anterior</p>
-                    </button>
-                  </a>
-                </Link>
-              )}
-
-              {nextPost?.existsNextPost && (
-                <Link href={`/post/${nextPost.uid}`}>
-                  <a>
-                    <button type="button">
-                      <h3>{nextPost.title}</h3>
-                      <p>Próximo post</p>
-                    </button>
-                  </a>
-                </Link>
-              )}
-            </section>
-
-            <Comments postUid={post.uid} />
-
-            {preview && (
-              <aside className={commonStyles.exitPreviewMode}>
-                <Link href="/api/exit-preview">
-                  <a>Sair do modo Preview</a>
-                </Link>
-              </aside>
-            )}
-          </main>
-        </>
-      )}
+        {preview && (
+          <aside>
+            <Link href="/api/exit-preview">
+              <a className={commonStyles.preview}>Sair do modo Preview</a>
+            </Link>
+          </aside>
+        )}
+      </main>
     </>
   );
 }
 
 export const getStaticPaths: GetStaticPaths = async () => {
   const prismic = getPrismicClient();
-  const postsResponse = await prismic.query(
-    [Prismic.Predicates.at('document.type', 'posts')],
-    {
-      fetch: ['posts.title'],
-      pageSize: 1,
-    }
-  );
+  const posts = await prismic.query([
+    Prismic.Predicates.at('document.type', 'posts'),
+  ]);
 
-  const paths = postsResponse.results.map(post => {
-    return { params: { slug: post.uid } };
+  const paths = posts.results.map(post => {
+    return {
+      params: {
+        slug: post.uid,
+      },
+    };
   });
 
   return {
@@ -256,19 +197,18 @@ export const getStaticProps: GetStaticProps = async ({
   preview = false,
   previewData,
 }) => {
-  const { slug } = params;
-
   const prismic = getPrismicClient();
+  const { slug } = params;
   const response = await prismic.getByUID('posts', String(slug), {
-    ref: previewData?.ref ?? null,
+    ref: previewData?.ref || null,
   });
 
   const prevPost = await prismic.query(
     [Prismic.Predicates.at('document.type', 'posts')],
     {
       pageSize: 1,
-      after: `${response.id}`,
-      orderings: '[document.first_publication_date desc]',
+      after: response.id,
+      orderings: '[document.first_publication_date]',
     }
   );
 
@@ -276,43 +216,40 @@ export const getStaticProps: GetStaticProps = async ({
     [Prismic.Predicates.at('document.type', 'posts')],
     {
       pageSize: 1,
-      after: `${response.id}`,
-      orderings: '[document.first_publication_date]',
+      after: response.id,
+      orderings: '[document.last_publication_date desc]',
     }
   );
 
-  const post: Post = {
+  const post = {
+    uid: response.uid,
     first_publication_date: response.first_publication_date,
     last_publication_date: response.last_publication_date,
-    uid: response.uid,
     data: {
       title: response.data.title,
       subtitle: response.data.subtitle,
+      author: response.data.author,
       banner: {
         url: response.data.banner.url,
       },
-      author: response.data.author,
-      content: response.data.content,
+      content: response.data.content.map(content => {
+        return {
+          heading: content.heading,
+          body: [...content.body],
+        };
+      }),
     },
   };
-
-  function getPrevNextPostData(currentPost, type) {
-    const existsKey = type === 'prev' ? 'existsPrevPost' : 'existsNextPost';
-    return {
-      [existsKey]: currentPost.results_size > 0,
-      title:
-        currentPost.results_size > 0 ? currentPost.results[0].data.title : '',
-      uid: currentPost.results_size > 0 ? currentPost.results[0].uid : '',
-    };
-  }
 
   return {
     props: {
       post,
-      prevPost: getPrevNextPostData(prevPost, 'prev'),
-      nextPost: getPrevNextPostData(nextPost, 'next'),
+      navigation: {
+        prevPost: prevPost?.results,
+        nextPost: nextPost?.results,
+      },
       preview,
     },
-    revalidate: 60 * 60 * 24, // 24 hours
+    revalidate: 1800,
   };
 };
